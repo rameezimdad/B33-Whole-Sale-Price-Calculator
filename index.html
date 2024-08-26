@@ -1,0 +1,228 @@
+
+
+<div class="container">
+      <h4 class="center-align">Wholesale Price Calculator</h4>
+
+      <!-- Item container -->
+      <div id="item-container">
+        <div class="item-row row">
+          <div class="input-field col s8">
+            <select class="item-select browser-default" onchange="updatePrice()">
+              <option value="" disabled selected>Select Item</option>
+            </select>
+          </div>
+          <div class="input-field col s3">
+            <input type="number" class="quantity" placeholder="Qty" value="1" min="1" onchange="updatePrice()">
+          </div>
+          <div class="input-field col s1">
+            <button class="btn remove-btn red" onclick="removeItem(this)">X</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tax and Discount Section -->
+      <div class="tax-discount-container row">
+        <div class="input-field col s6">
+          <input type="number" id="tax" placeholder="Tax (%)" value="0" min="0" onchange="updatePrice()">
+          <label for="tax">Tax (%)</label>
+        </div>
+        <div class="input-field col s6">
+          <input type="number" id="discount" placeholder="Discount ($)" value="0" min="0" onchange="updatePrice()">
+          <label for="discount">Discount ($)</label>
+        </div>
+      </div>
+
+      <!-- Total and Action Buttons -->
+      <div class="total-container">
+        <button class="btn waves-effect waves-light blue" onclick="addItem()">
+          <i class="material-icons left">add</i>Add Item
+        </button>
+        <h5>Total: $<span id="total">0.00</span></h5>
+        <h5>Final Price: $<span id="final-total">0.00</span></h5>
+        <button class="btn waves-effect waves-light green" onclick="printSlip()">
+          <i class="material-icons left">print</i>Print Slip
+        </button>
+      </div>
+
+      <!-- Print slip section -->
+      <div id="print-section" style="display:none;">
+        <h5>SHOP NAME</h5>
+        <p>Address: Lorem Ipsum, 23-10</p>
+        <p>Tel: 11223344</p>
+        <p>***********************</p>
+        <h5>CASH RECEIPT</h5>
+        <p>***********************</p>
+        <div id="print-content">
+          <!-- Items will be dynamically inserted here -->
+        </div>
+        <div class="details">
+          <p>Tax: <span id="print-tax">0.00</span>%</p>
+          <p>Discount: $<span id="print-discount">0.00</span></p>
+        </div>
+        <div class="total">
+          <h5>Total: $<span id="print-total">0.00</span></h5>
+          <h5>Final Price: $<span id="print-final-total">0.00</span></h5>
+          <p>Cash: <span id="print-cash">0.00</span></p>
+          <p>Change: <span id="print-change">0.00</span></p>
+        </div>
+        <p>THANK YOU!</p>
+        <div class="barcode">
+          <!-- Placeholder for barcode -->
+          |||||||||||||||||
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function fetchItems() {
+        google.script.run.withSuccessHandler(function(items) {
+          const selects = document.querySelectorAll('.item-select');
+          selects.forEach(select => {
+            const currentValue = select.value;
+            select.innerHTML = '<option value="" disabled>Select Item</option>';
+            items.forEach(item => {
+              const option = document.createElement('option');
+              option.value = item[0];
+              option.textContent = `${item[0]} ($${item[1]})`;
+              select.appendChild(option);
+            });
+            if (currentValue) select.value = currentValue;
+          });
+        }).getItems();
+      }
+
+      function addItem() {
+        const container = document.getElementById('item-container');
+        const firstRow = container.querySelector('.item-row');
+        const newRow = firstRow.cloneNode(true);
+        newRow.querySelector('.quantity').value = 1;
+        container.appendChild(newRow);
+        fetchItems();
+      }
+
+      function removeItem(button) {
+        const container = document.getElementById('item-container');
+        if (container.children.length > 1) {
+          button.closest('.item-row').remove();
+          updatePrice();
+        }
+      }
+
+      function updatePrice() {
+        const items = [];
+        const rows = document.querySelectorAll('.item-row');
+        rows.forEach(row => {
+          const item = row.querySelector('.item-select').value;
+          const quantity = row.querySelector('.quantity').value;
+          if (item && quantity) {
+            items.push({name: item, quantity: parseInt(quantity)});
+          }
+        });
+
+        google.script.run.withSuccessHandler(function(total) {
+          document.getElementById('total').textContent = total.toFixed(2);
+
+          const taxPercentage = parseFloat(document.getElementById('tax').value) || 0;
+          const discountAmount = parseFloat(document.getElementById('discount').value) || 0;
+
+          const taxAmount = (total * taxPercentage) / 100;
+          const finalPrice = total + taxAmount - discountAmount;
+
+          document.getElementById('final-total').textContent = finalPrice.toFixed(2);
+        }).calculateTotal(items);
+      }
+
+      function printSlip() {
+        const items = [];
+        const rows = document.querySelectorAll('.item-row');
+        let content = '';
+
+        rows.forEach(row => {
+          const item = row.querySelector('.item-select').value;
+          const quantity = row.querySelector('.quantity').value;
+          if (item && quantity) {
+            items.push({name: item, quantity: parseInt(quantity)});
+            content += `<p><span>${quantity} x ${item}</span><span>${(item.price * quantity).toFixed(2)}</span></p>`;
+          }
+        });
+
+        document.getElementById('print-content').innerHTML = content;
+        document.getElementById('print-tax').textContent = document.getElementById('tax').value;
+        document.getElementById('print-discount').textContent = document.getElementById('discount').value;
+        document.getElementById('print-total').textContent = document.getElementById('total').textContent;
+        document.getElementById('print-final-total').textContent = document.getElementById('final-total').textContent;
+        document.getElementById('print-cash').textContent = (parseFloat(document.getElementById('final-total').textContent) + parseFloat(document.getElementById('print-change').textContent)).toFixed(2);
+        document.getElementById('print-change').textContent = (parseFloat(document.getElementById('print-cash').textContent) - parseFloat(document.getElementById('print-final-total').textContent)).toFixed(2);
+
+        const printSection = document.getElementById('print-section').innerHTML;
+        const originalContent = document.body.innerHTML;
+
+        document.body.innerHTML = printSection;
+        window.print();
+        document.body.innerHTML = originalContent;
+
+        fetchItems();
+      }
+
+      document.addEventListener('DOMContentLoaded', function() {
+        M.AutoInit(); // Initialize Materialize components
+        fetchItems();
+      });
+
+      </script>
+
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+ <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+
+<style>
+  /* Style for main calculator */
+      .item-row {
+        margin-bottom: 15px;
+      }
+      .total-container, .tax-discount-container {
+        text-align: right;
+        margin-top: 20px;
+      }
+      .tax-discount-container .input-field {
+        margin-bottom: 0;
+      }
+      @media screen and (max-width: 600px) {
+        .item-row .input-field {
+          width: 100% !important;
+        }
+        .total-container, .tax-discount-container {
+          text-align: left;
+        }
+      }
+
+      /* Style for print section */
+      #print-section {
+        font-family: 'Courier New', Courier, monospace;
+        width: 300px;
+        margin: 0 auto;
+        text-align: center;
+        border: 1px dashed #000;
+        padding: 20px;
+      }
+      #print-section h5, #print-section p {
+        margin: 5px 0;
+      }
+      #print-content p {
+        display: flex;
+        justify-content: space-between;
+      }
+      #print-section .total, #print-section .details {
+        border-top: 1px dashed #000;
+        margin-top: 10px;
+        padding-top: 10px;
+      }
+      #print-section .details {
+        border-bottom: 1px dashed #000;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+      }
+      .barcode {
+        margin-top: 10px;
+      }
+
+</style>
